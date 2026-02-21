@@ -73,8 +73,13 @@ export default function Plugins({ serverId }) {
     }, 3000);
   };
 
-  const handleLoad = (name) => ws?.command(serverId, `oxide.load ${name}`);
-  const handleUnload = (name) => ws?.command(serverId, `oxide.unload ${name}`);
+  const handleLoad = (name) => {
+    ws?.command(serverId, `oxide.load ${name}`);
+  };
+
+  const handleUnload = (name) => {
+    ws?.command(serverId, `oxide.unload ${name}`);
+  };
 
   const filtered = plugins.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase())
@@ -123,6 +128,12 @@ export default function Plugins({ serverId }) {
               )}
             </div>
             <div className="flex gap-1 shrink-0">
+              <button
+                onClick={() => handleLoad(p.name)}
+                className="btn-secondary text-xs px-2 py-1"
+              >
+                Load
+              </button>
               <button
                 onClick={() => handleReload(p.name)}
                 disabled={reloading === p.name}

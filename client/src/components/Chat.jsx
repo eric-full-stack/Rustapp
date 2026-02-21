@@ -7,6 +7,9 @@ export default function Chat({ serverId }) {
   const [messages, setMessages] = useState([]);
   const [filter, setFilter] = useState('all'); // 'all', 'global', 'team'
   const [loading, setLoading] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [searchName, setSearchName] = useState('');
+  const [chatInput, setChatInput] = useState('');
   const endRef = useRef(null);
   const maxMessages = 500;
 
@@ -33,12 +36,39 @@ export default function Chat({ serverId }) {
   }, [ws, serverId]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, filter]);
+    if (autoScroll) {
+      endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, filter, autoScroll]);
 
-  const filtered = filter === 'all'
-    ? messages
-    : messages.filter((m) => m.channel === filter);
+  const filtered = (() => {
+    let list = filter === 'all'
+      ? messages
+      : messages.filter((m) => m.channel === filter);
+
+    if (searchName.trim()) {
+      const q = searchName.toLowerCase();
+      list = list.filter((m) =>
+        (m.playerName || '').toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  })();
+
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    const msg = chatInput.trim();
+    if (!msg) return;
+    ws?.command(serverId, `say "${msg}"`);
+    setChatInput('');
+  };
+
+  const handleMute = (steamId, playerName) => {
+    if (!steamId) return;
+    ws?.command(serverId, `mute ${steamId}`);
+    alert(`Jogador ${playerName || steamId} mutado`);
+  };
 
   const copyChat = async () => {
     const text = filtered.map((m) =>
@@ -54,11 +84,32 @@ export default function Chat({ serverId }) {
     <div className="flex flex-col h-full">
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold">Chat</h2>
-          <button onClick={copyChat} className="text-dark-400 text-xs active:text-dark-200">
-            Copiar tudo
-          </button>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold">Chat</h2>
+            <span className="badge bg-dark-700 text-dark-300 text-xs">{filtered.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAutoScroll(!autoScroll)}
+              className={`text-xs px-2 py-1 rounded ${
+                autoScroll ? 'bg-green-900/40 text-green-400' : 'bg-dark-700 text-dark-400'
+              }`}
+            >
+              Auto-scroll {autoScroll ? 'ON' : 'OFF'}
+            </button>
+            <button onClick={copyChat} className="text-dark-400 text-xs active:text-dark-200">
+              Copiar tudo
+            </button>
+          </div>
         </div>
+
+        {/* Search by player name */}
+        <input
+          placeholder="Filtrar por nome do jogador..."
+          value={searchName}
+          onChange={(e) => setSearchName(e.target.value)}
+          className="w-full mb-2 text-sm"
+        />
 
         {/* Filter tabs */}
         <div className="flex gap-2">
@@ -98,7 +149,15 @@ export default function Chat({ serverId }) {
               <span className={`text-xs font-medium ${m.channel === 'team' ? 'text-blue-400' : 'text-green-400'}`}>
                 {m.channel === 'team' ? '[TIME]' : '[GLOBAL]'}
               </span>
-              <span className="font-semibold text-sm text-rust-300 truncate">{m.playerName || 'Server'}</span>
+              <span className="font-semibold text-sm text-rust-300 truncate flex-1">{m.playerName || 'Server'}</span>
+              {m.steamId && (
+                <button
+                  onClick={() => handleMute(m.steamId, m.playerName)}
+                  className="text-dark-500 text-[10px] active:text-red-400 shrink-0"
+                >
+                  Mute
+                </button>
+              )}
             </div>
             <div className="text-sm text-dark-200 mt-0.5 break-words">{m.message}</div>
             {m.timestamp && (
@@ -110,6 +169,20 @@ export default function Chat({ serverId }) {
         ))}
         <div ref={endRef} />
       </div>
+
+      {/* Send message input */}
+      <form onSubmit={handleSendMessage} className="p-3 bg-dark-900 border-t border-dark-700 flex gap-2">
+        <input
+          value={chatInput}
+          onChange={(e) => setChatInput(e.target.value)}
+          placeholder="Enviar mensagem no servidor..."
+          className="flex-1 text-sm"
+          autoComplete="off"
+        />
+        <button type="submit" className="btn-primary px-4 text-sm">
+          Enviar
+        </button>
+      </form>
     </div>
   );
 }

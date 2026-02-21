@@ -8,6 +8,8 @@ import Plugins from './Plugins';
 import FpsChart from './FpsChart';
 import History from './History';
 import QuickActions from './QuickActions';
+import PlayerNotes from './PlayerNotes';
+import BanList from './BanList';
 
 const TABS = ['overview', 'players', 'console', 'chat', 'more'];
 
@@ -18,6 +20,8 @@ export default function Dashboard({ server, onBack }) {
   const [players, setPlayers] = useState([]);
   const [connected, setConnected] = useState(false);
   const [moreTab, setMoreTab] = useState(null);
+  const [fpsBanner, setFpsBanner] = useState(null);
+  const [confirmRestart, setConfirmRestart] = useState(false);
 
   // Subscribe to server
   useEffect(() => {
@@ -39,9 +43,39 @@ export default function Dashboard({ server, onBack }) {
       ws.on('players', (msg) => {
         if (msg.serverId === server.id) setPlayers(msg.data);
       }),
+      ws.on('fps_drop', (msg) => {
+        if (msg.serverId === server.id) {
+          setFpsBanner({
+            before: Math.round(msg.data.fpsBefore),
+            after: Math.round(msg.data.fpsAfter),
+            time: new Date().toLocaleTimeString('pt-BR'),
+          });
+          setTimeout(() => setFpsBanner(null), 10000);
+        }
+      }),
     ];
     return () => unsubs.forEach((u) => u());
   }, [ws, server.id]);
+
+  const handleQuickSave = () => {
+    ws?.command(server.id, 'server.save');
+  };
+
+  const handleRestart = () => {
+    if (!confirmRestart) {
+      setConfirmRestart(true);
+      return;
+    }
+    ws?.command(server.id, 'restart 300 "Server reiniciando em 5 minutos"');
+    setConfirmRestart(false);
+  };
+
+  const getHealthScore = (fps) => {
+    if (!fps) return { label: '--', color: 'text-dark-400', bg: 'bg-dark-700' };
+    if (fps > 25) return { label: 'Saudavel', color: 'text-green-400', bg: 'bg-green-900/30' };
+    if (fps > 15) return { label: 'Atencao', color: 'text-yellow-400', bg: 'bg-yellow-900/30' };
+    return { label: 'Critico', color: 'text-red-400', bg: 'bg-red-900/30' };
+  };
 
   const renderMoreMenu = () => (
     <div className="p-4 space-y-3">
@@ -51,8 +85,10 @@ export default function Dashboard({ server, onBack }) {
       {[
         ['plugins', 'Plugins'],
         ['fps', 'Monitor FPS'],
-        ['history', 'Histórico de Jogadores'],
-        ['quick', 'Ações Rápidas'],
+        ['history', 'Historico de Jogadores'],
+        ['quick', 'Acoes Rapidas'],
+        ['notes', 'Notas de Jogadores'],
+        ['banlist', 'Lista de Bans'],
       ].map(([key, label]) => (
         <button key={key} onClick={() => setMoreTab(key)} className="btn-secondary w-full text-left">
           {label}
@@ -62,69 +98,135 @@ export default function Dashboard({ server, onBack }) {
   );
 
   const formatUptime = (seconds) => {
-    if (!seconds) return '—';
+    if (!seconds) return '--';
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     return `${h}h ${m}m`;
   };
 
-  const renderOverview = () => (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold truncate">{server.name}</h2>
-          <div className="text-dark-400 text-sm">{server.host}:{server.rcon_port}</div>
+  const renderOverview = () => {
+    const health = getHealthScore(serverInfo?.fps);
+
+    return (
+      <div className="p-4 space-y-4">
+        {/* FPS Drop Banner */}
+        {fpsBanner && (
+          <div className="bg-red-900/50 border border-red-700 rounded-lg p-3 flex items-center gap-3 animate-pulse">
+            <span className="text-red-400 text-lg font-bold">!</span>
+            <div className="flex-1">
+              <div className="text-red-300 text-sm font-semibold">Queda de FPS Detectada</div>
+              <div className="text-red-400 text-xs">
+                {fpsBanner.before} FPS &rarr; {fpsBanner.after} FPS as {fpsBanner.time}
+              </div>
+            </div>
+            <button onClick={() => setFpsBanner(null)} className="text-red-400 text-xs active:text-red-200">
+              Fechar
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold truncate">{server.name}</h2>
+            <div className="text-dark-400 text-sm">{server.host}:{server.rcon_port}</div>
+          </div>
+          <div className={`badge ${connected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
+            {connected ? 'Online' : 'Offline'}
+          </div>
         </div>
-        <div className={`badge ${connected ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`}>
-          {connected ? 'Online' : 'Offline'}
-        </div>
+
+        {/* Quick Action Buttons */}
+        {connected && serverInfo && (
+          <div className="flex gap-2">
+            <button onClick={handleQuickSave} className="btn-success flex-1 text-sm py-2">
+              Salvar Mundo
+            </button>
+            <button
+              onClick={handleRestart}
+              className={`flex-1 text-sm py-2 ${confirmRestart ? 'btn-danger' : 'btn-warn'}`}
+            >
+              {confirmRestart ? 'Confirmar Restart?' : 'Restart'}
+            </button>
+            {confirmRestart && (
+              <button
+                onClick={() => setConfirmRestart(false)}
+                className="btn-secondary text-sm py-2 px-3"
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Server Health Score */}
+        {serverInfo && (
+          <div className={`card ${health.bg} border border-dark-700`}>
+            <div className="flex items-center justify-between">
+              <div className="text-dark-400 text-xs uppercase tracking-wider">Saude do Servidor</div>
+              <div className={`text-sm font-bold ${health.color}`}>{health.label}</div>
+            </div>
+            <div className={`text-3xl font-bold mt-1 ${health.color}`}>
+              {Math.round(serverInfo.fps || 0)} FPS
+            </div>
+          </div>
+        )}
+
+        {serverInfo && (
+          <>
+            <div className="card">
+              <div className="text-dark-400 text-xs uppercase tracking-wider mb-2">Servidor</div>
+              <div className="font-semibold truncate mb-3">{serverInfo.hostname || '--'}</div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <InfoItem label="Jogadores" value={`${serverInfo.players}/${serverInfo.maxPlayers}`} />
+                <InfoItem label="Na Fila" value={serverInfo.queued || 0} />
+                <InfoItem label="FPS" value={Math.round(serverInfo.fps || 0)} highlight={serverInfo.fps < 15} />
+                <InfoItem label="Entidades" value={serverInfo.entityCount?.toLocaleString()} />
+                <InfoItem label="Memoria" value={`${serverInfo.memory || 0} MB`} />
+                <InfoItem label="Uptime" value={formatUptime(serverInfo.uptime)} />
+                <InfoItem label="Mapa" value={serverInfo.map || '--'} />
+                <InfoItem label="Hora in-game" value={serverInfo.gameTime || '--'} />
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="text-dark-400 text-xs uppercase tracking-wider mb-2">Mundo</div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <InfoItem label="Seed" value={serverInfo.seed || '--'} />
+                <InfoItem label="Tamanho" value={serverInfo.worldSize ? `${serverInfo.worldSize}m` : '--'} />
+                <InfoItem label="Ultimo Save" value={serverInfo.saveTime || '--'} />
+                <InfoItem label="Protocolo" value={serverInfo.protocol || '--'} />
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="text-dark-400 text-xs uppercase tracking-wider mb-2">Rede</div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <InfoItem label="Net In" value={`${serverInfo.networkIn || 0}`} />
+                <InfoItem label="Net Out" value={`${serverInfo.networkOut || 0}`} />
+                <InfoItem label="Conectando" value={serverInfo.joining || 0} />
+              </div>
+            </div>
+          </>
+        )}
+
+        {!serverInfo && connected && (
+          <div className="card text-center text-dark-400 py-6 animate-pulse">
+            Carregando dados do servidor...
+          </div>
+        )}
+
+        {!connected && (
+          <div className="card text-center text-dark-400 py-6">
+            Conectando ao servidor RCON...
+          </div>
+        )}
+
+        <button onClick={onBack} className="btn-secondary w-full mt-2">
+          &#8592; Voltar aos Servidores
+        </button>
       </div>
-
-      {serverInfo && (
-        <>
-          <div className="card">
-            <div className="text-dark-400 text-xs uppercase tracking-wider mb-2">Servidor</div>
-            <div className="font-semibold truncate mb-3">{serverInfo.hostname || '—'}</div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <InfoItem label="Jogadores" value={`${serverInfo.players}/${serverInfo.maxPlayers}`} />
-              <InfoItem label="Na Fila" value={serverInfo.queued || 0} />
-              <InfoItem label="FPS" value={Math.round(serverInfo.fps || 0)} highlight={serverInfo.fps < 15} />
-              <InfoItem label="Entidades" value={serverInfo.entityCount?.toLocaleString()} />
-              <InfoItem label="Memória" value={`${serverInfo.memory || 0} MB`} />
-              <InfoItem label="Uptime" value={formatUptime(serverInfo.uptime)} />
-              <InfoItem label="Mapa" value={serverInfo.map || '—'} />
-              <InfoItem label="Hora in-game" value={serverInfo.gameTime || '—'} />
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="text-dark-400 text-xs uppercase tracking-wider mb-2">Rede</div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <InfoItem label="Net In" value={`${serverInfo.networkIn || 0}`} />
-              <InfoItem label="Net Out" value={`${serverInfo.networkOut || 0}`} />
-              <InfoItem label="Conectando" value={serverInfo.joining || 0} />
-            </div>
-          </div>
-        </>
-      )}
-
-      {!serverInfo && connected && (
-        <div className="card text-center text-dark-400 py-6 animate-pulse">
-          Carregando dados do servidor...
-        </div>
-      )}
-
-      {!connected && (
-        <div className="card text-center text-dark-400 py-6">
-          Conectando ao servidor RCON...
-        </div>
-      )}
-
-      <button onClick={onBack} className="btn-secondary w-full mt-2">
-        &#8592; Voltar aos Servidores
-      </button>
-    </div>
-  );
+    );
+  };
 
   const renderContent = () => {
     if (tab === 'more' && moreTab) {
@@ -138,6 +240,8 @@ export default function Dashboard({ server, onBack }) {
         case 'fps': return <>{backBtn}<FpsChart serverId={server.id} /></>;
         case 'history': return <>{backBtn}<History serverId={server.id} /></>;
         case 'quick': return <>{backBtn}<QuickActions serverId={server.id} players={players} /></>;
+        case 'notes': return <>{backBtn}<PlayerNotes serverId={server.id} players={players} /></>;
+        case 'banlist': return <>{backBtn}<BanList serverId={server.id} /></>;
       }
     }
 

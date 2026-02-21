@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../App';
 import { api } from '../api';
 
@@ -31,6 +31,69 @@ export default function History({ serverId }) {
     });
   }, [ws, serverId]);
 
+  // Calculate total playtime per player
+  const playtimes = useMemo(() => {
+    const map = {};
+    const sessions = {};
+
+    const source = playerLogs || events;
+    const sorted = [...source].sort((a, b) =>
+      new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
+    );
+
+    for (const e of sorted) {
+      const id = e.steam_id;
+      if (!id) continue;
+
+      if (!map[id]) {
+        map[id] = { name: e.player_name || id, totalMs: 0 };
+      }
+
+      if (e.event === 'join') {
+        sessions[id] = new Date(e.timestamp).getTime();
+      } else if (e.event === 'leave' && sessions[id]) {
+        const joinTime = sessions[id];
+        const leaveTime = new Date(e.timestamp).getTime();
+        if (leaveTime > joinTime) {
+          map[id].totalMs += leaveTime - joinTime;
+        }
+        delete sessions[id];
+      }
+    }
+
+    // Count still-active sessions (joined but no leave yet)
+    const now = Date.now();
+    for (const [id, joinTime] of Object.entries(sessions)) {
+      if (map[id]) {
+        map[id].totalMs += now - joinTime;
+      }
+    }
+
+    return map;
+  }, [events, playerLogs]);
+
+  const formatPlaytime = (ms) => {
+    if (!ms || ms <= 0) return '0m';
+    const totalMinutes = Math.floor(ms / 60000);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  };
+
+  const formatFullDate = (timestamp) => {
+    if (!timestamp) return '';
+    const d = new Date(timestamp);
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
   const handleViewPlayer = async (steamId) => {
     if (filterSteamId === steamId) {
       setFilterSteamId('');
@@ -54,9 +117,56 @@ export default function History({ serverId }) {
       )
     : displayed;
 
+  const exportHistory = async () => {
+    const lines = filtered.map((e) =>
+      `[${formatFullDate(e.timestamp)}] ${e.event === 'join' ? 'ENTROU' : 'SAIU'} - ${e.player_name || 'Desconhecido'} (${e.steam_id || ''})`
+    );
+
+    // Add playtime summary
+    const playtimeEntries = Object.entries(playtimes)
+      .filter(([, v]) => v.totalMs > 0)
+      .sort((a, b) => b[1].totalMs - a[1].totalMs);
+
+    if (playtimeEntries.length > 0) {
+      lines.push('');
+      lines.push('--- TEMPO DE JOGO ---');
+      for (const [id, data] of playtimeEntries) {
+        lines.push(`${data.name} (${id}): ${formatPlaytime(data.totalMs)}`);
+      }
+    }
+
+    const text = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('Historico copiado para a area de transferencia!');
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      alert('Historico copiado!');
+    }
+  };
+
+  // Get unique players with playtime for summary
+  const playerSummary = useMemo(() => {
+    return Object.entries(playtimes)
+      .filter(([, v]) => v.totalMs > 0)
+      .sort((a, b) => b[1].totalMs - a[1].totalMs);
+  }, [playtimes]);
+
   return (
     <div className="px-4 pb-4">
-      <h2 className="text-lg font-bold mb-3">Histórico de Jogadores</h2>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-bold">Historico de Jogadores</h2>
+        <button onClick={exportHistory} className="text-dark-400 text-xs active:text-dark-200">
+          Exportar
+        </button>
+      </div>
 
       <input
         placeholder="Buscar por nome ou Steam ID..."
@@ -76,6 +186,36 @@ export default function History({ serverId }) {
           >
             Limpar filtro
           </button>
+        </div>
+      )}
+
+      {/* Playtime summary for filtered player */}
+      {filterSteamId && playtimes[filterSteamId] && (
+        <div className="card mb-3 bg-dark-800 border border-dark-700">
+          <div className="text-dark-400 text-xs uppercase tracking-wider mb-1">Tempo Total de Jogo</div>
+          <div className="text-xl font-bold text-rust-400">
+            {formatPlaytime(playtimes[filterSteamId].totalMs)}
+          </div>
+          <div className="text-dark-400 text-xs mt-1">{playtimes[filterSteamId].name}</div>
+        </div>
+      )}
+
+      {/* Top playtime summary (only when not filtered) */}
+      {!filterSteamId && playerSummary.length > 0 && (
+        <div className="card mb-3">
+          <div className="text-dark-400 text-xs uppercase tracking-wider mb-2">Top Tempo de Jogo</div>
+          <div className="space-y-1">
+            {playerSummary.slice(0, 5).map(([id, data]) => (
+              <div
+                key={id}
+                className="flex items-center justify-between text-sm cursor-pointer active:bg-dark-700 rounded px-1 py-0.5"
+                onClick={() => handleViewPlayer(id)}
+              >
+                <span className="text-dark-200 truncate">{data.name}</span>
+                <span className="text-rust-400 font-medium shrink-0 ml-2">{formatPlaytime(data.totalMs)}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -106,7 +246,7 @@ export default function History({ serverId }) {
                 {e.event === 'join' ? 'Entrou' : 'Saiu'}
               </div>
               <div className="text-dark-500 text-xs">
-                {e.timestamp ? new Date(e.timestamp).toLocaleTimeString('pt-BR') : ''}
+                {formatFullDate(e.timestamp)}
               </div>
             </div>
           </div>

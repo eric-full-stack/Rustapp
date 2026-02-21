@@ -1,6 +1,29 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-rust-50: #fef3e2;
+  --color-rust-100: #fde4b9;
+  --color-rust-200: #fcd38c;
+  --color-rust-300: #fbc25f;
+  --color-rust-400: #fab53d;
+  --color-rust-500: #f9a825;
+  --color-rust-600: #f57f17;
+  --color-rust-700: #e65100;
+  --color-rust-800: #bf360c;
+  --color-rust-900: #8b1a00;
+
+  --color-dark-50: #f8fafc;
+  --color-dark-100: #f1f5f9;
+  --color-dark-200: #e2e8f0;
+  --color-dark-300: #cbd5e1;
+  --color-dark-400: #94a3b8;
+  --color-dark-500: #64748b;
+  --color-dark-600: #475569;
+  --color-dark-700: #334155;
+  --color-dark-800: #1e293b;
+  --color-dark-900: #0f172a;
+  --color-dark-950: #020617;
+}
 
 @layer base {
   * { -webkit-tap-highlight-color: transparent; }
@@ -13,7 +36,7 @@
   }
   input, textarea, select {
     @apply bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-dark-100 text-base;
-    font-size: 16px; /* prevent iOS zoom */
+    font-size: 16px;
   }
   input:focus, textarea:focus, select:focus {
     @apply outline-none ring-2 ring-rust-500 border-rust-500;
@@ -25,13 +48,19 @@
     @apply px-4 py-2.5 rounded-lg font-medium text-sm active:scale-95 transition-all duration-150 select-none;
   }
   .btn-primary {
-    @apply btn bg-rust-600 text-white hover:bg-rust-700;
+    @apply px-4 py-2.5 rounded-lg font-medium text-sm active:scale-95 transition-all duration-150 select-none bg-rust-600 text-white hover:bg-rust-700;
   }
   .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-700;
+    @apply px-4 py-2.5 rounded-lg font-medium text-sm active:scale-95 transition-all duration-150 select-none bg-red-600 text-white hover:bg-red-700;
   }
   .btn-secondary {
-    @apply btn bg-dark-700 text-dark-200 hover:bg-dark-600;
+    @apply px-4 py-2.5 rounded-lg font-medium text-sm active:scale-95 transition-all duration-150 select-none bg-dark-700 text-dark-200 hover:bg-dark-600;
+  }
+  .btn-success {
+    @apply px-4 py-2.5 rounded-lg font-medium text-sm active:scale-95 transition-all duration-150 select-none bg-green-700 text-white hover:bg-green-800;
+  }
+  .btn-warn {
+    @apply px-4 py-2.5 rounded-lg font-medium text-sm active:scale-95 transition-all duration-150 select-none bg-yellow-700 text-yellow-100 hover:bg-yellow-800;
   }
   .card {
     @apply bg-dark-800 rounded-xl p-4 border border-dark-700;
@@ -41,6 +70,11 @@
   }
 }
 
-/* Hide scrollbar but keep scroll */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.toast-enter { animation: slideUp 0.3s ease-out; }
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

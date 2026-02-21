@@ -45,6 +45,13 @@ export const api = {
   getFps: (serverId, limit) => request('GET', `/api/servers/${serverId}/fps?limit=${limit || 120}`),
   getFpsDrops: (serverId) => request('GET', `/api/servers/${serverId}/fps-drops`),
 
+  // Notes
+  getNotes: (serverId) => request('GET', `/api/servers/${serverId}/notes`),
+  getPlayerNotes: (serverId, steamId) => request('GET', `/api/servers/${serverId}/notes/${steamId}`),
+  addNote: (serverId, data) => request('POST', `/api/servers/${serverId}/notes`, data),
+  deleteNote: (id) => request('DELETE', `/api/notes/${id}`),
+
+  // Quick Actions
   getQuickActions: () => request('GET', '/api/quick-actions'),
   addQuickAction: (data) => request('POST', '/api/quick-actions', data),
   updateQuickAction: (id, data) => request('PUT', `/api/quick-actions/${id}`, data),
